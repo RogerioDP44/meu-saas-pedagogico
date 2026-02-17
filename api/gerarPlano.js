@@ -1,8 +1,9 @@
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json("Método não permitido");
+    if (req.method !== 'POST') return res.status(405).json({ error: "Método não permitido" });
+
+    const { tema } = req.body;
 
     try {
-        const { tema } = req.body;
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -12,15 +13,22 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 model: "gpt-4o-mini",
                 messages: [
-                    { role: "system", content: "Você é um mentor pedagógico. Responda apenas com o texto do plano de aula solicitado." },
-                    { role: "user", content: `Gere um plano de aula completo sobre: ${tema}` }
+                    { role: "system", content: "Você é um mentor pedagógico. Gere planos de aula estruturados pela BNCC." },
+                    { role: "user", content: `Gere um plano de aula sobre: ${tema}` }
                 ]
             })
         });
 
         const data = await response.json();
+
+        if (!response.ok) {
+            return res.status(response.status).json({ error: data.error.message });
+        }
+
+        // Retorna apenas a mensagem de texto para o front-end
         return res.status(200).json(data.choices[0].message.content);
+
     } catch (error) {
-        return res.status(500).json("Erro na API da OpenAI.");
+        return res.status(500).json({ error: "Erro interno no servidor." });
     }
 }

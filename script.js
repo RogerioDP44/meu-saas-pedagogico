@@ -10,7 +10,7 @@ const inputTema = document.getElementById('inputTema');
 const inputConteudo = document.getElementById('inputConteudo');
 
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO (PRO/FREE)
+// 2. VERIFICAÇÃO DE ACESSO (PRO)
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -21,28 +21,24 @@ async function verificarAcesso() {
 
     const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
     
-    if (perfil) {
-        if (perfil.plano_pro) {
-            const expira = new Date(perfil.expira_em);
-            const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
-            elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
-            elCred.style.color = "#25D366"; // Verde das suas imagens
-        } else {
-            elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
-            elCred.style.color = "#7c3aed";
-        }
+    if (perfil && perfil.plano_pro) {
+        const expira = new Date(perfil.expira_em);
+        const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
+        elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
+        elCred.style.color = "#25D366"; // Verde conforme sua imagem
     }
 }
 
 // ==========================================
-// 3. GERADOR COM IA (CORREÇÃO OBJECT OBJECT)
+// 3. GERADOR COM IA (CORREÇÃO DE ERRO)
 // ==========================================
 window.gerarComIA = async function() {
     const tema = inputTema.value;
-    if (!tema) return alert("Digite um tema!");
+    if (!tema) return alert("Por favor, digite um tema!");
 
     btnIA.innerText = "Sismatic gerando... 🧠";
     btnIA.disabled = true;
+    inputConteudo.value = "Gerando seu plano de aula...";
 
     try {
         const response = await fetch("/api/gerarPlano", {
@@ -51,13 +47,16 @@ window.gerarComIA = async function() {
             body: JSON.stringify({ tema })
         });
         
-        const contentIA = await response.json();
-        
-        // CORREÇÃO: Garante que exibe o texto limpo
-        inputConteudo.value = typeof contentIA === 'object' ? (contentIA.texto || JSON.stringify(contentIA)) : contentIA;
+        const resultado = await response.json();
 
+        if (response.ok) {
+            // CORREÇÃO: Exibe apenas o texto, eliminando o [object Object]
+            inputConteudo.value = typeof resultado === 'string' ? resultado : JSON.stringify(resultado);
+        } else {
+            inputConteudo.value = "Erro: " + (resultado.error || "Verifique a chave na Vercel.");
+        }
     } catch (err) { 
-        inputConteudo.value = "Erro na API da OpenAI. Verifique sua chave na Vercel."; 
+        inputConteudo.value = "Erro de conexão com o servidor."; 
     } finally {
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
@@ -65,7 +64,7 @@ window.gerarComIA = async function() {
 };
 
 // ==========================================
-// 4. IMPRIMIR E PAGAMENTO
+// 4. BOTÃO DE IMPRIMIR
 // ==========================================
 window.imprimirDireto = () => {
     const conteudo = inputConteudo.value;
@@ -83,21 +82,6 @@ window.imprimirDireto = () => {
         </html>
     `);
     win.document.close();
-};
-
-window.iniciarPagamento = async (plano) => {
-    const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) return window.location.href = "login.html";
-
-    try {
-        const response = await fetch("/api/criarPreferencia", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idUsuario: session.user.id, plano: plano })
-        });
-        const data = await response.json();
-        if (data.init_point) window.location.href = data.init_point;
-    } catch (e) { alert("Erro ao gerar pagamento."); }
 };
 
 verificarAcesso();
