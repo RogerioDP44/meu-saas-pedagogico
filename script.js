@@ -9,30 +9,16 @@ const btnIA = document.getElementById('btnIA');
 const inputTema = document.getElementById('inputTema');
 const inputConteudo = document.getElementById('inputConteudo');
 
-const dicasPedagogicas = [
-    "A ludicidade ajuda na fixação de conceitos complexos na Educação Infantil.",
-    "Ao planejar, foque sempre nas competências gerais da BNCC.",
-    "A avaliação contínua é mais eficaz que uma única prova ao final do bimestre.",
-    "Utilizar recursos visuais aumenta a retenção de conteúdo em até 60%.",
-    "A escuta ativa dos alunos pode gerar insights incríveis para o próximo plano."
-];
-
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO
+// 2. VERIFICAÇÃO DE ACESSO (PRO/FREE)
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
     const elUser = document.getElementById('userLogado');
     const elCred = document.getElementById('numCreditos');
-    const btnSair = document.getElementById('btnSair');
-    const btnEntrar = document.getElementById('btnEntrar');
-    const sessaoPlanos = document.getElementById('sessaoPlanos');
 
     if (!session) {
         if(elUser) elUser.innerText = "👤 Visitante";
-        if(elCred) elCred.innerText = "Faça login para usar";
-        if (btnEntrar) btnEntrar.style.display = 'inline';
-        if (btnSair) btnSair.style.display = 'none';
         return; 
     }
 
@@ -40,35 +26,22 @@ async function verificarAcesso() {
     
     if (perfil) {
         if(elUser) elUser.innerText = "👤 " + session.user.email;
-        if (btnEntrar) btnEntrar.style.display = 'none';
-        if (btnSair) btnSair.style.display = 'inline';
-
         if (perfil.plano_pro) {
-            const hoje = new Date();
             const expira = new Date(perfil.expira_em);
-            const diasRestantes = Math.ceil((expira - hoje) / (1000 * 60 * 60 * 24));
-            elCred.innerText = `Assinante PRO ✅ (${diasRestantes} dias)`;
-            elCred.style.color = "#25D366";
-            if (sessaoPlanos) sessaoPlanos.style.display = 'none';
+            const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
+            elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
+            elCred.style.color = "#25D366"; // Verde conforme sua imagem
         } else {
             elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
             elCred.style.color = "#7c3aed";
-            if (sessaoPlanos) sessaoPlanos.style.display = 'block';
         }
-        carregarLista();
     }
 }
 
 // ==========================================
-// 3. GERADOR COM IA (CORREÇÃO OBJECT OBJECT)
+// 3. GERADOR COM IA (CORREÇÃO DE TEXTO)
 // ==========================================
 window.gerarComIA = async function() {
-    const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) return window.location.href = "login.html";
-
-    const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
-    if (!perfil.plano_pro && perfil.creditos_teste <= 0) return alert("Assine o PRO para continuar!");
-
     const tema = inputTema.value;
     if (!tema) return alert("Digite um tema!");
 
@@ -84,15 +57,11 @@ window.gerarComIA = async function() {
         
         const contentIA = await response.json();
         
-        // CORREÇÃO AQUI: Garante que estamos pegando o texto, não o objeto
+        // Garante que o texto seja exibido corretamente
         inputConteudo.value = typeof contentIA === 'object' ? (contentIA.texto || JSON.stringify(contentIA)) : contentIA;
 
-        if (!perfil.plano_pro) {
-            await _supabase.from('perfis').update({ creditos_teste: perfil.creditos_teste - 1 }).eq('id', session.user.id);
-        }
-        verificarAcesso();
     } catch (err) { 
-        alert("Erro na IA."); 
+        inputConteudo.value = "Erro ao gerar conteúdo. Verifique sua conexão."; 
     } finally {
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
@@ -100,7 +69,7 @@ window.gerarComIA = async function() {
 };
 
 // ==========================================
-// 4. IMPRIMIR E UTILITÁRIOS
+// 4. IMPRIMIR, WHATSAPP E PDF
 // ==========================================
 window.imprimirDireto = () => {
     const conteudo = inputConteudo.value;
@@ -120,17 +89,17 @@ window.imprimirDireto = () => {
     win.document.close();
 };
 
+window.zapDireto = () => {
+    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
+    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+};
+
 window.pdfDireto = () => {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     const texto = doc.splitTextToSize(inputConteudo.value, 180);
     doc.text(texto, 15, 20);
     doc.save("plano_sismatic.pdf");
-};
-
-window.zapDireto = () => {
-    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
 };
 
 window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
