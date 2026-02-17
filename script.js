@@ -1,5 +1,5 @@
 // ==========================================
-// 1. CONFIGURAÇÕES E CHAVES (CHAVE_OPENAI REMOVIDA DAQUI)
+// 1. CONFIGURAÇÕES E CLIENTE SUPABASE
 // ==========================================
 const supabaseUrl = 'https://bdlgtweiktdnipvtolfr.supabase.co';
 const supabaseKey = 'sb_publishable_IVy8AYPapIr4iijYTwdXNw_tOkrDZEf';
@@ -18,7 +18,7 @@ const dicasPedagogicas = [
 ];
 
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO
+// 2. VERIFICAÇÃO DE ACESSO E PERFIL
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -29,18 +29,17 @@ async function verificarAcesso() {
     const sessaoPlanos = document.getElementById('sessaoPlanos');
 
     if (!session) {
-        elUser.innerText = "👤 Visitante";
-        elCred.innerText = "Faça login para usar";
+        if(elUser) elUser.innerText = "👤 Visitante";
+        if(elCred) elCred.innerText = "Faça login para usar";
         if (btnEntrar) btnEntrar.style.display = 'inline';
         if (btnSair) btnSair.style.display = 'none';
-        if (sessaoPlanos) sessaoPlanos.style.display = 'block';
         return; 
     }
 
     const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
     
     if (perfil) {
-        elUser.innerText = "👤 " + session.user.email;
+        if(elUser) elUser.innerText = "👤 " + session.user.email;
         if (btnEntrar) btnEntrar.style.display = 'none';
         if (btnSair) btnSair.style.display = 'inline';
 
@@ -61,7 +60,7 @@ async function verificarAcesso() {
 }
 
 // ==========================================
-// 3. GERADOR COM IA (CHAMANDO ROTA SEGURA)
+// 3. GERADOR COM IA (ROTA SEGURA VERCEL)
 // ==========================================
 window.gerarComIA = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -77,7 +76,6 @@ window.gerarComIA = async function() {
     const tema = inputTema.value;
     if (!tema) return alert("Digite um tema!");
 
-    // Feedback visual (Dicas)
     const dicaAleatoria = dicasPedagogicas[Math.floor(Math.random() * dicasPedagogicas.length)];
     const containerDica = document.getElementById('containerDica');
     if (containerDica) {
@@ -89,7 +87,6 @@ window.gerarComIA = async function() {
     btnIA.disabled = true;
 
     try {
-        // CHAMADA PARA A ROTA DA VERCEL
         const response = await fetch("/api/gerarPlano", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -99,7 +96,6 @@ window.gerarComIA = async function() {
         const contentIA = await response.json();
         inputConteudo.value = contentIA;
 
-        // Descontar crédito apenas se não for PRO
         if (!perfil.plano_pro) {
             await _supabase.from('perfis').update({ creditos_teste: perfil.creditos_teste - 1 }).eq('id', session.user.id);
         }
@@ -113,8 +109,67 @@ window.gerarComIA = async function() {
     }
 };
 
-// Funções de Histórico, Impressão, Pagamento e Logout permanecem as mesmas...
-// (ImprimirDireto, ExcluirPlano, RecuperarPlano, CarregarLista, IniciarPagamento, FazerLogout, SalvarNoBanco, LimparTela, ZapDireto, PdfDireto)
-// [Omitido por brevidade, mantendo sua lógica original]
+// ==========================================
+// 4. PAGAMENTO (MERCADO PAGO)
+// ==========================================
+window.iniciarPagamento = async (plano) => {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) {
+        alert("Faça login para assinar!");
+        return window.location.href = "login.html";
+    }
 
+    try {
+        const response = await fetch("/api/criarPreferencia", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                idUsuario: session.user.id,
+                plano: plano
+            })
+        });
+
+        const data = await response.json();
+        if (data.init_point) {
+            window.location.href = data.init_point;
+        } else {
+            alert("Erro ao gerar pagamento.");
+        }
+    } catch (e) {
+        alert("Erro de conexão.");
+    }
+};
+
+// ==========================================
+// 5. UTILITÁRIOS (PDF, WHATSAPP, HISTÓRICO)
+// ==========================================
+window.salvarNoBanco = async function() {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) return alert("Faça login!");
+    if (!inputConteudo.value) return alert("Gere um plano primeiro!");
+    await _supabase.from('atividades').insert([{ tema: inputTema.value, conteudo: inputConteudo.value, user_id: session.user.id }]);
+    alert("✅ Salvo!"); carregarLista();
+};
+
+window.zapDireto = () => {
+    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
+    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+};
+
+window.pdfDireto = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const texto = doc.splitTextToSize(inputConteudo.value, 180);
+    doc.text(texto, 15, 20);
+    doc.save("plano_sismatic.pdf");
+};
+
+window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
+
+window.fazerLogout = async () => {
+    await _supabase.auth.signOut();
+    window.location.href = "login.html";
+};
+
+// Inicialização
 verificarAcesso();
