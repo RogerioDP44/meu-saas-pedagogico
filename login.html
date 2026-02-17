@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Gerador BNCC Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --primary: #7c3aed; --bg: #f4f7f6; }
+        body { font-family: sans-serif; background: var(--bg); display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .login-card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); width: 100%; max-width: 350px; text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; font-size: 16px; transition: 0.3s; }
+        .btn-entrar { background: var(--primary); color: white; }
+        .btn-criar { background: white; color: var(--primary); border: 2px solid var(--primary); }
+        button:hover { opacity: 0.9; transform: scale(0.98); }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1 style="color: var(--primary); margin-bottom: 5px;">🎒 Acessar</h1>
+        <p style="color: #666; margin-bottom: 25px;">Entre para planejar suas aulas</p>
+        
+        <input type="email" id="email" placeholder="Seu e-mail">
+        <input type="password" id="senha" placeholder="Sua senha">
+        
+        <button onclick="logar()" class="btn-entrar">Entrar no Sistema</button>
+        <button onclick="cadastrar()" class="btn-criar">Criar Minha Conta</button>
+        
+        <p id="msg" style="color: red; font-size: 13px; margin-top: 15px; display: none;"></p>
+    </div>
+
+    <script>
+        const supabaseUrl = 'https://bdlgtweiktdnipvtolfr.supabase.co';
+        const supabaseKey = 'sb_publishable_IVy8AYPapIr4iijYTwdXNw_tOkrDZEf';
+        const _supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function logar() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('senha').value;
+            const { error } = await _supabase.auth.signInWithPassword({ email, password });
+            
+            if (error) alert("Erro: e-mail ou senha incorretos.");
+            else window.location.href = "index.html"; 
+        }
+
+        async function cadastrar() {
+    const email = document.getElementById('email').value;
+    const password = document.getElementById('senha').value;
+    const msg = document.getElementById('msg');
+    
+    msg.style.display = "none";
+
+    if(password.length < 6) return alert("A senha deve ter no mínimo 6 dígitos.");
+
+    // 1. Cria a autenticação no Supabase
+    const { data, error } = await _supabase.auth.signUp({ email, password });
+    
+    if (error) {
+        msg.innerText = "Erro: " + error.message;
+        msg.style.display = "block";
+        return;
+    }
+
+    // 2. Tenta inserir na tabela perfis (Garante que o ID seja UUID)
+    if (data.user) {
+        const { error: dbError } = await _supabase
+            .from('perfis')
+            .insert([{ 
+                id: data.user.id, // O Supabase já envia como UUID
+                creditos: 3 
+            }]);
+
+        if (dbError) {
+            console.error("Erro no banco:", dbError);
+            alert("Conta criada, mas houve um erro ao gerar seus créditos. Verifique a tabela 'perfis'.");
+        } else {
+            alert("✅ Conta criada com sucesso! Agora você já pode entrar.");
+        }
+    }
+}
+    </script>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        if (urlParams.get('status') === 'sucesso') {
+            // Cria o elemento do aviso
+            const aviso = document.createElement('div');
+            
+            // Estilização Profissional (Roxo Sismatic)
+            aviso.style.cssText = `
+                background: #f3f0ff;
+                color: #7c3aed;
+                padding: 20px;
+                border-radius: 15px;
+                margin-bottom: 25px;
+                text-align: center;
+                border: 2px solid #7c3aed;
+                font-family: 'Segoe UI', sans-serif;
+                box-shadow: 0 4px 15px rgba(124, 58, 237, 0.1);
+            `;
+            
+            aviso.innerHTML = `
+                <div style="font-size: 24px; margin-bottom: 10px;">✅</div>
+                <strong style="font-size: 16px;">Pagamento Confirmado com Sucesso!</strong><br>
+                <span style="font-size: 14px; opacity: 0.8;">Sua assinatura PRO já foi liberada. Faça login abaixo para começar a usar!</span>
+            `;
+            
+            // Tenta inserir o aviso antes do formulário de login
+            const container = document.querySelector('.container') || document.body.firstChild;
+            if (container === document.body.firstChild) {
+                document.body.prepend(aviso);
+            } else {
+                container.prepend(aviso);
+            }
+
+            // Limpa a URL para a mensagem não reaparecer se ele atualizar a página
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    });
+</script>
+
+
+</body>
+</html>
