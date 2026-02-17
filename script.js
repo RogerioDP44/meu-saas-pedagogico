@@ -18,7 +18,7 @@ const dicasPedagogicas = [
 ];
 
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO E PERFIL
+// 2. VERIFICAÇÃO DE ACESSO
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -60,28 +60,17 @@ async function verificarAcesso() {
 }
 
 // ==========================================
-// 3. GERADOR COM IA (ROTA SEGURA VERCEL)
+// 3. GERADOR COM IA (CORREÇÃO OBJECT OBJECT)
 // ==========================================
 window.gerarComIA = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) {
-        alert("📚 Você precisa de uma conta para gerar planejamentos!");
-        window.location.href = "login.html";
-        return;
-    }
+    if (!session) return window.location.href = "login.html";
 
     const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
     if (!perfil.plano_pro && perfil.creditos_teste <= 0) return alert("Assine o PRO para continuar!");
 
     const tema = inputTema.value;
     if (!tema) return alert("Digite um tema!");
-
-    const dicaAleatoria = dicasPedagogicas[Math.floor(Math.random() * dicasPedagogicas.length)];
-    const containerDica = document.getElementById('containerDica');
-    if (containerDica) {
-        document.getElementById('textoDica').innerText = dicaAleatoria;
-        containerDica.style.display = 'block';
-    }
 
     btnIA.innerText = "Sismatic gerando... 🧠";
     btnIA.disabled = true;
@@ -94,66 +83,41 @@ window.gerarComIA = async function() {
         });
         
         const contentIA = await response.json();
-        inputConteudo.value = contentIA;
+        
+        // CORREÇÃO AQUI: Garante que estamos pegando o texto, não o objeto
+        inputConteudo.value = typeof contentIA === 'object' ? (contentIA.texto || JSON.stringify(contentIA)) : contentIA;
 
         if (!perfil.plano_pro) {
             await _supabase.from('perfis').update({ creditos_teste: perfil.creditos_teste - 1 }).eq('id', session.user.id);
         }
         verificarAcesso();
     } catch (err) { 
-        alert("Erro na IA. Verifique sua conexão."); 
+        alert("Erro na IA."); 
     } finally {
-        if (containerDica) containerDica.style.display = 'none';
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
     }
 };
 
 // ==========================================
-// 4. PAGAMENTO (MERCADO PAGO)
+// 4. IMPRIMIR E UTILITÁRIOS
 // ==========================================
-window.iniciarPagamento = async (plano) => {
-    const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) {
-        alert("Faça login para assinar!");
-        return window.location.href = "login.html";
-    }
+window.imprimirDireto = () => {
+    const conteudo = inputConteudo.value;
+    if (!conteudo || conteudo.includes("[object")) return alert("Gere um plano primeiro!");
 
-    try {
-        const response = await fetch("/api/criarPreferencia", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                idUsuario: session.user.id,
-                plano: plano
-            })
-        });
-
-        const data = await response.json();
-        if (data.init_point) {
-            window.location.href = data.init_point;
-        } else {
-            alert("Erro ao gerar pagamento.");
-        }
-    } catch (e) {
-        alert("Erro de conexão.");
-    }
-};
-
-// ==========================================
-// 5. UTILITÁRIOS (PDF, WHATSAPP, HISTÓRICO)
-// ==========================================
-window.salvarNoBanco = async function() {
-    const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) return alert("Faça login!");
-    if (!inputConteudo.value) return alert("Gere um plano primeiro!");
-    await _supabase.from('atividades').insert([{ tema: inputTema.value, conteudo: inputConteudo.value, user_id: session.user.id }]);
-    alert("✅ Salvo!"); carregarLista();
-};
-
-window.zapDireto = () => {
-    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+    const win = window.open('', '', 'height=700,width=700');
+    win.document.write(`
+        <html>
+            <body style="font-family:sans-serif; padding:40px;">
+                <h1 style="color:#7c3aed;">${inputTema.value}</h1>
+                <hr>
+                <pre style="white-space:pre-wrap; font-size:14px;">${conteudo}</pre>
+                <script>window.onload=function(){window.print();window.close();}<\/script>
+            </body>
+        </html>
+    `);
+    win.document.close();
 };
 
 window.pdfDireto = () => {
@@ -164,12 +128,12 @@ window.pdfDireto = () => {
     doc.save("plano_sismatic.pdf");
 };
 
-window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
-
-window.fazerLogout = async () => {
-    await _supabase.auth.signOut();
-    window.location.href = "login.html";
+window.zapDireto = () => {
+    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
+    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
 };
+
+window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
 
 // Inicialização
 verificarAcesso();
