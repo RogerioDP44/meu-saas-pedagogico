@@ -17,20 +17,16 @@ async function verificarAcesso() {
     const elUser = document.getElementById('userLogado');
     const elCred = document.getElementById('numCreditos');
 
-    if (!session) {
-        if(elUser) elUser.innerText = "👤 Visitante";
-        return; 
-    }
+    if (!session) return;
 
     const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
     
     if (perfil) {
-        if(elUser) elUser.innerText = "👤 " + session.user.email;
         if (perfil.plano_pro) {
             const expira = new Date(perfil.expira_em);
             const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
             elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
-            elCred.style.color = "#25D366"; // Verde conforme sua imagem
+            elCred.style.color = "#25D366"; // Verde das suas imagens
         } else {
             elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
             elCred.style.color = "#7c3aed";
@@ -39,7 +35,7 @@ async function verificarAcesso() {
 }
 
 // ==========================================
-// 3. GERADOR COM IA (CORREÇÃO DE TEXTO)
+// 3. GERADOR COM IA (CORREÇÃO OBJECT OBJECT)
 // ==========================================
 window.gerarComIA = async function() {
     const tema = inputTema.value;
@@ -57,11 +53,11 @@ window.gerarComIA = async function() {
         
         const contentIA = await response.json();
         
-        // Garante que o texto seja exibido corretamente
+        // CORREÇÃO: Garante que exibe o texto limpo
         inputConteudo.value = typeof contentIA === 'object' ? (contentIA.texto || JSON.stringify(contentIA)) : contentIA;
 
     } catch (err) { 
-        inputConteudo.value = "Erro ao gerar conteúdo. Verifique sua conexão."; 
+        inputConteudo.value = "Erro na API da OpenAI. Verifique sua chave na Vercel."; 
     } finally {
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
@@ -69,7 +65,7 @@ window.gerarComIA = async function() {
 };
 
 // ==========================================
-// 4. IMPRIMIR, WHATSAPP E PDF
+// 4. IMPRIMIR E PAGAMENTO
 // ==========================================
 window.imprimirDireto = () => {
     const conteudo = inputConteudo.value;
@@ -89,20 +85,19 @@ window.imprimirDireto = () => {
     win.document.close();
 };
 
-window.zapDireto = () => {
-    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
-    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+window.iniciarPagamento = async (plano) => {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) return window.location.href = "login.html";
+
+    try {
+        const response = await fetch("/api/criarPreferencia", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idUsuario: session.user.id, plano: plano })
+        });
+        const data = await response.json();
+        if (data.init_point) window.location.href = data.init_point;
+    } catch (e) { alert("Erro ao gerar pagamento."); }
 };
 
-window.pdfDireto = () => {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const texto = doc.splitTextToSize(inputConteudo.value, 180);
-    doc.text(texto, 15, 20);
-    doc.save("plano_sismatic.pdf");
-};
-
-window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
-
-// Inicialização
 verificarAcesso();

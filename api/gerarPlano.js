@@ -12,14 +12,13 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 model: "gpt-4o-mini",
                 messages: [
-                    { role: "system", content: "Você é um mentor pedagógico especialista na BNCC. Gere apenas o texto do plano de aula." },
-                    { role: "user", content: `Gere um plano de aula sobre: ${tema}` }
+                    { role: "system", content: "Você é um mentor pedagógico. Responda apenas com o texto do plano de aula solicitado." },
+                    { role: "user", content: `Gere um plano de aula completo sobre: ${tema}` }
                 ]
             })
         });
 
         const data = await response.json();
-        // Retorna apenas a string de texto limpa
         return res.status(200).json(data.choices[0].message.content);
     } catch (error) {
         return res.status(500).json("Erro na API da OpenAI.");
