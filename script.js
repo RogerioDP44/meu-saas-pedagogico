@@ -14,7 +14,6 @@ const inputConteudo = document.getElementById('inputConteudo');
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
-    const elUser = document.getElementById('userLogado');
     const elCred = document.getElementById('numCreditos');
 
     if (!session) return;
@@ -25,12 +24,12 @@ async function verificarAcesso() {
         const expira = new Date(perfil.expira_em);
         const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
         elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
-        elCred.style.color = "#25D366"; // Verde conforme sua imagem
+        elCred.style.color = "#25D366"; // Verde das suas imagens
     }
 }
 
 // ==========================================
-// 3. GERADOR COM IA (CORREÇÃO DE ERRO)
+// 3. GERADOR COM IA (CORREÇÃO OBJECT OBJECT)
 // ==========================================
 window.gerarComIA = async function() {
     const tema = inputTema.value;
@@ -50,13 +49,14 @@ window.gerarComIA = async function() {
         const resultado = await response.json();
 
         if (response.ok) {
-            // CORREÇÃO: Exibe apenas o texto, eliminando o [object Object]
+            // CORREÇÃO: Exibe apenas o texto limpo
             inputConteudo.value = typeof resultado === 'string' ? resultado : JSON.stringify(resultado);
         } else {
-            inputConteudo.value = "Erro: " + (resultado.error || "Verifique a chave na Vercel.");
+            // Exibe o erro real vindo da API
+            inputConteudo.value = "Erro: " + (resultado.error || "Falha na comunicação.");
         }
     } catch (err) { 
-        inputConteudo.value = "Erro de conexão com o servidor."; 
+        inputConteudo.value = "Erro de conexão com o servidor da Vercel."; 
     } finally {
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
@@ -68,7 +68,9 @@ window.gerarComIA = async function() {
 // ==========================================
 window.imprimirDireto = () => {
     const conteudo = inputConteudo.value;
-    if (!conteudo || conteudo.includes("[object")) return alert("Gere um plano primeiro!");
+    if (!conteudo || conteudo.includes("[object") || conteudo.includes("Erro:")) {
+        return alert("Gere um plano válido primeiro!");
+    }
 
     const win = window.open('', '', 'height=700,width=700');
     win.document.write(`
