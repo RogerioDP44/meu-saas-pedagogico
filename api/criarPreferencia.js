@@ -1,6 +1,5 @@
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).send('Método não permitido');
-
     const { idUsuario, plano } = req.body;
     const valor = plano === 'anual' ? 149.00 : 19.90; // Valores do seu design
 
@@ -19,15 +18,10 @@ export default async function handler(req, res) {
                     currency_id: "BRL"
                 }],
                 external_reference: idUsuario,
-                back_urls: {
-                    success: "https://sismatic.com.br",
-                    pending: "https://sismatic.com.br",
-                    failure: "https://sismatic.com.br"
-                },
+                back_urls: { success: "https://sismatic.com.br", failure: "https://sismatic.com.br" },
                 auto_return: "approved"
             })
         });
-
         const data = await response.json();
         res.status(200).json(data);
     } catch (error) {

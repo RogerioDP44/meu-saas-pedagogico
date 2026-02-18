@@ -13,8 +13,8 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 model: "gpt-4o-mini",
                 messages: [
-                    { role: "system", content: "Você é um mentor pedagógico. Gere planos de aula estruturados pela BNCC." },
-                    { role: "user", content: `Gere um plano de aula completo sobre: ${tema}` }
+                    { role: "system", content: "Você é um mentor pedagógico especializado na BNCC." },
+                    { role: "user", content: `Gere um plano de aula sobre: ${tema}` }
                 ]
             })
         });
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
         const data = await response.json();
 
         if (!response.ok) {
-            // Retorna o erro exato da OpenAI para diagnóstico
+            // Captura o erro da OpenAI para exibir no front-end
             return res.status(response.status).json({ error: data.error.message });
         }
 
