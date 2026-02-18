@@ -64,12 +64,13 @@
 
     // 2. Tenta inserir na tabela perfis (Garante que o ID seja UUID)
     if (data.user) {
-        const { error: dbError } = await _supabase
-            .from('perfis')
-            .insert([{ 
-                id: data.user.id, // O Supabase já envia como UUID
-                creditos: 3 
-            }]);
+       // No login.html, procure a função cadastrar()
+const { error: dbError } = await _supabase
+    .from('perfis')
+    .insert([{ 
+        id: data.user.id, 
+        creditos_teste: 3  // MUDAR AQUI PARA creditos_teste
+    }]);
 
         if (dbError) {
             console.error("Erro no banco:", dbError);
