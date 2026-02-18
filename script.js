@@ -9,8 +9,15 @@ const btnIA = document.getElementById('btnIA');
 const inputTema = document.getElementById('inputTema');
 const inputConteudo = document.getElementById('inputConteudo');
 
+const dicasPedagogicas = [
+    "A ludicidade ajuda na fixação de conceitos complexos na Educação Infantil.",
+    "Ao planejar, foque sempre nas competências gerais da BNCC.",
+    "A avaliação contínua é mais eficaz que uma única prova.",
+    "Utilizar recursos visuais aumenta a retenção em até 60%."
+];
+
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO (NOME E STATUS)
+// 2. VERIFICAÇÃO DE ACESSO
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -39,19 +46,19 @@ async function verificarAcesso() {
 
         if (perfil.plano_pro) {
             const hoje = new Date();
-            // Proteção contra data nula no banco
             const expira = perfil.expira_em ? new Date(perfil.expira_em) : hoje;
-            const diffTime = expira - hoje; // CORRIGIDO: era 'hoy'
+            const diffTime = expira - hoje;
             const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
             
             if (elCred) {
-                elCred.innerText = `Assinante PRO ✅ (${diasRestantes} dias)`;
+                elCred.innerText = `Assinante PRO ✅ (${diasRestantes > 0 ? diasRestantes : 0} dias)`;
                 elCred.style.color = "#25D366";
             }
             if (sessaoPlanos) sessaoPlanos.style.display = 'none';
         } else {
             if (elCred) {
-                elCred.innerText = (perfil.creditos || 0) + " créditos";
+                // AJUSTADO: Agora lê 'creditos_teste' conforme seu banco
+                elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
                 elCred.style.color = "#7c3aed";
             }
             if (sessaoPlanos) sessaoPlanos.style.display = 'block';
@@ -61,7 +68,7 @@ async function verificarAcesso() {
 }
 
 // ==========================================
-// 3. GERADOR COM IA
+// 3. GERADOR COM IA E HISTÓRICO
 // ==========================================
 window.gerarComIA = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -72,6 +79,14 @@ window.gerarComIA = async function() {
     }
 
     if (!inputTema.value) return alert("Por favor, digite um tema!");
+
+    // Mostrar Dica
+    const containerDica = document.getElementById('containerDica');
+    if (containerDica) {
+        const dicaAleatoria = dicasPedagogicas[Math.floor(Math.random() * dicasPedagogicas.length)];
+        document.getElementById('textoDica').innerText = dicaAleatoria;
+        containerDica.style.display = 'block';
+    }
 
     btnIA.innerText = "Sismatic gerando... 🧠";
     btnIA.disabled = true;
@@ -84,17 +99,18 @@ window.gerarComIA = async function() {
         });
         const resultado = await response.json();
         inputConteudo.value = typeof resultado === 'string' ? resultado : (resultado.texto || JSON.stringify(resultado));
+        
+        // Atualiza créditos na tela
+        verificarAcesso();
     } catch (err) { 
         alert("Erro na IA. Verifique a sua conexão."); 
     } finally {
+        if (containerDica) containerDica.style.display = 'none';
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
     }
 };
 
-// ==========================================
-// 4. HISTÓRICO E AÇÕES
-// ==========================================
 async function carregarLista() {
     const { data: { session } } = await _supabase.auth.getSession();
     if (!session) return;
@@ -120,25 +136,21 @@ async function carregarLista() {
 
 window.excluirPlano = async (id, e) => {
     e.stopPropagation();
-    if (!confirm("Excluir permanentemente?")) return;
+    if (!confirm("Excluir definitivamente?")) return;
     await _supabase.from('atividades').delete().eq('id', id);
     carregarLista();
 };
 
 window.salvarNoBanco = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
-    if (!session) return alert("Inicie sessão para salvar!");
+    if (!session) return alert("Inicie sessão para guardar!");
     if (!inputConteudo.value) return alert("Gere um plano primeiro!");
 
-    const { error } = await _supabase.from('atividades').insert([
+    await _supabase.from('atividades').insert([
         { tema: inputTema.value, conteudo: inputConteudo.value, user_id: session.user.id }
     ]);
-
-    if (error) alert("Erro ao salvar.");
-    else {
-        alert("✅ Planejamento salvo!");
-        carregarLista();
-    }
+    alert("✅ Planejamento salvo!");
+    carregarLista();
 };
 
 window.recuperarPlano = async (id) => {
@@ -150,15 +162,9 @@ window.recuperarPlano = async (id) => {
     }
 };
 
-window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
-
-window.fazerLogout = async (e) => {
-    if(e) e.preventDefault();
-    await _supabase.auth.signOut();
-    window.location.reload();
-};
-
-// Funções de Exportação
+// ==========================================
+// 4. EXPORTAÇÃO E AUXILIARES
+// ==========================================
 window.zapDireto = () => {
     if (!inputConteudo.value) return alert("Gere o plano primeiro!");
     const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
@@ -181,6 +187,14 @@ window.imprimirDireto = () => {
     win.document.close();
 };
 
+window.limparTela = () => { inputTema.value = ""; inputConteudo.value = ""; };
+
+window.fazerLogout = async (e) => {
+    if(e) e.preventDefault();
+    await _supabase.auth.signOut();
+    window.location.reload();
+};
+
 window.iniciarPagamento = async (plano) => {
     const { data: { session } } = await _supabase.auth.getSession();
     if (!session) return window.location.href = "login.html";
@@ -192,7 +206,7 @@ window.iniciarPagamento = async (plano) => {
         });
         const data = await response.json();
         if (data.init_point) window.location.href = data.init_point;
-    } catch (e) { alert("Erro no pagamento."); }
+    } catch (e) { alert("Erro ao processar pagamento."); }
 };
 
 // Inicialização
