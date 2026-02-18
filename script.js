@@ -9,8 +9,16 @@ const btnIA = document.getElementById('btnIA');
 const inputTema = document.getElementById('inputTema');
 const inputConteudo = document.getElementById('inputConteudo');
 
+const dicasPedagogicas = [
+    "A ludicidade ajuda na fixação de conceitos complexos na Educação Infantil.",
+    "Ao planejar, foque sempre nas competências gerais da BNCC.",
+    "A avaliação contínua é mais eficaz que uma única prova ao final do bimestre.",
+    "Utilizar recursos visuais aumenta a retenção de conteúdo em até 60%.",
+    "A escuta ativa dos alunos pode gerar insights incríveis para o próximo plano."
+];
+
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO
+// 2. VERIFICAÇÃO DE ACESSO (NOME E STATUS)
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -50,7 +58,7 @@ async function verificarAcesso() {
             if (sessaoPlanos) sessaoPlanos.style.display = 'none';
         } else {
             if (elCred) {
-                elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
+                elCred.innerText = (perfil.creditos || 0) + " créditos";
                 elCred.style.color = "#7c3aed";
             }
             if (sessaoPlanos) sessaoPlanos.style.display = 'block';
@@ -70,7 +78,16 @@ window.gerarComIA = async function() {
         return;
     }
 
-    if (!inputTema.value) return alert("Por favor, digite um tema!");
+    const tema = inputTema.value;
+    if (!tema) return alert("Por favor, digite um tema!");
+
+    // Mostrar Dica
+    const dicaAleatoria = dicasPedagogicas[Math.floor(Math.random() * dicasPedagogicas.length)];
+    const containerDica = document.getElementById('containerDica');
+    if (containerDica) {
+        document.getElementById('textoDica').innerText = dicaAleatoria;
+        containerDica.style.display = 'block';
+    }
 
     btnIA.innerText = "Sismatic gerando... 🧠";
     btnIA.disabled = true;
@@ -79,15 +96,14 @@ window.gerarComIA = async function() {
         const response = await fetch("/api/gerarPlano", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tema: inputTema.value })
+            body: JSON.stringify({ tema })
         });
         const resultado = await response.json();
         inputConteudo.value = typeof resultado === 'string' ? resultado : (resultado.texto || JSON.stringify(resultado));
-        
-        verificarAcesso(); // Atualiza créditos após gerar
     } catch (err) { 
         alert("Erro na IA. Verifique a sua conexão."); 
     } finally {
+        if (containerDica) containerDica.style.display = 'none';
         btnIA.innerText = "✨ Gerar Planejamento";
         btnIA.disabled = false;
     }
@@ -108,17 +124,30 @@ async function carregarLista() {
     const listaDiv = document.getElementById('listaAtividades');
     if (listaDiv && data) {
         listaDiv.innerHTML = data.map(item => `
-            <div class="historico-item" onclick="recuperarPlano('${item.id}')">
-                <div><strong>📋 ${item.tema}</strong><br><small>${new Date(item.created_at).toLocaleDateString()}</small></div>
+            <div class="historico-item" onclick="recuperarPlano('${item.id}')" style="background:#f8fafc; border-left:5px solid #7c3aed; padding:12px; border-radius:10px; margin-bottom:10px; cursor:pointer;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>📋 ${item.tema}</strong><br>
+                        <small style="color:#999;">${new Date(item.created_at).toLocaleDateString()}</small>
+                    </div>
+                    <button onclick="excluirPlano('${item.id}', event)" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:18px;">🗑️</button>
+                </div>
             </div>
         `).join('');
     }
 }
 
+window.excluirPlano = async (id, e) => {
+    e.stopPropagation();
+    if (!confirm("Excluir definitivamente?")) return;
+    await _supabase.from('atividades').delete().eq('id', id);
+    carregarLista();
+};
+
 window.salvarNoBanco = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
     if (!session) return alert("Inicie sessão para guardar!");
-    if (!inputConteudo.value) return alert("Gere um plano antes de salvar!");
+    if (!inputConteudo.value) return alert("Gere um plano primeiro!");
 
     const { error } = await _supabase.from('atividades').insert([
         { tema: inputTema.value, conteudo: inputConteudo.value, user_id: session.user.id }
@@ -148,7 +177,6 @@ window.fazerLogout = async (e) => {
     window.location.reload();
 };
 
-// Funções de Exportação (PDF e WhatsApp)
 window.zapDireto = () => {
     if (!inputConteudo.value) return alert("Gere o plano primeiro!");
     const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
@@ -161,7 +189,30 @@ window.pdfDireto = () => {
     const doc = new jsPDF();
     const texto = doc.splitTextToSize(inputConteudo.value, 180);
     doc.text(texto, 15, 20);
-    doc.save("plano_sismatic.pdf");
+    doc.save(`plano_sismatic.pdf`);
+};
+
+window.imprimirDireto = () => {
+    if (!inputConteudo.value) return alert("Gere um conteúdo primeiro!");
+    const win = window.open('', '', 'height=700,width=700');
+    win.document.write(`<html><body style="font-family:sans-serif; padding:40px;"><h1>${inputTema.value}</h1><pre style="white-space:pre-wrap;">${inputConteudo.value}</pre><script>window.onload=function(){window.print();window.close();}<\/script></body></html>`);
+    win.document.close();
+};
+
+window.iniciarPagamento = async (plano) => {
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) return window.location.href = "login.html";
+    const valor = plano === 'anual' ? 149.00 : 19.90;
+    
+    try {
+        const response = await fetch("/api/venderPlano", { // Chama a função do Vercel
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idUsuario: session.user.id, plano })
+        });
+        const data = await response.json();
+        if (data.init_point) window.location.href = data.init_point;
+    } catch (e) { alert("Erro ao processar pagamento."); }
 };
 
 // Inicialização
