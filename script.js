@@ -10,10 +10,11 @@ const inputTema = document.getElementById('inputTema');
 const inputConteudo = document.getElementById('inputConteudo');
 
 // ==========================================
-// 2. VERIFICAÇÃO DE ACESSO (NOME E STATUS)
+// 2. VERIFICAÇÃO DE ACESSO
 // ==========================================
 async function verificarAcesso() {
     const { data: { session } } = await _supabase.auth.getSession();
+    
     const elUser = document.getElementById('userLogado');
     const elCred = document.getElementById('numCreditos');
     const btnSair = document.getElementById('btnSair');
@@ -22,39 +23,54 @@ async function verificarAcesso() {
 
     if (!session) {
         if (elUser) elUser.innerText = "👤 Visitante";
+        if (elCred) elCred.innerText = "Faça login para usar";
         if (btnEntrar) btnEntrar.style.display = 'inline';
         if (btnSair) btnSair.style.display = 'none';
-        return;
+        if (sessaoPlanos) sessaoPlanos.style.display = 'block';
+        return; 
     }
 
-    // Exibe o email do utilizador no topo
-    if (elUser) elUser.innerText = "👤 " + session.user.email;
-    if (btnEntrar) btnEntrar.style.display = 'none';
-    if (btnSair) btnSair.style.display = 'inline';
-
-    // Procura o perfil para confirmar o Plano PRO
     const { data: perfil } = await _supabase.from('perfis').select('*').eq('id', session.user.id).single();
     
-    if (perfil && elCred) {
+    if (perfil) {
+        if (elUser) elUser.innerText = "👤 " + session.user.email;
+        if (btnEntrar) btnEntrar.style.display = 'none';
+        if (btnSair) btnSair.style.display = 'inline';
+
         if (perfil.plano_pro) {
-            const expira = new Date(perfil.expira_em);
-            const dias = Math.ceil((expira - new Date()) / (1000 * 60 * 60 * 24));
-            elCred.innerText = `Assinante PRO ✅ (${dias} dias)`;
-            elCred.style.color = "#25D366";
+            const hoje = new Date();
+            const expira = perfil.expira_em ? new Date(perfil.expira_em) : hoje;
+            const diffTime = expira - hoje; // CORRIGIDO: de 'hoy' para 'hoje'
+            const diasRestantes = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (elCred) {
+                elCred.innerText = `Assinante PRO ✅ (${diasRestantes} dias)`;
+                elCred.style.color = "#25D366";
+            }
             if (sessaoPlanos) sessaoPlanos.style.display = 'none';
         } else {
-            elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
+            if (elCred) {
+                elCred.innerText = (perfil.creditos_teste || 0) + " créditos";
+                elCred.style.color = "#7c3aed";
+            }
+            if (sessaoPlanos) sessaoPlanos.style.display = 'block';
         }
+        carregarLista(); 
     }
-    carregarLista(); // Carrega o histórico de planejamentos
 }
 
 // ==========================================
-// 3. GERADOR COM IA (PEDAGÓGICO)
+// 3. GERADOR COM IA
 // ==========================================
 window.gerarComIA = async function() {
-    const tema = inputTema.value;
-    if (!tema) return alert("Por favor, digite um tema!");
+    const { data: { session } } = await _supabase.auth.getSession();
+    if (!session) {
+        alert("📚 Você precisa de uma conta para gerar planejamentos!");
+        window.location.href = "login.html";
+        return;
+    }
+
+    if (!inputTema.value) return alert("Por favor, digite um tema!");
 
     btnIA.innerText = "Sismatic gerando... 🧠";
     btnIA.disabled = true;
@@ -63,11 +79,12 @@ window.gerarComIA = async function() {
         const response = await fetch("/api/gerarPlano", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ tema })
+            body: JSON.stringify({ tema: inputTema.value })
         });
         const resultado = await response.json();
-        // Garante que o texto não venha como [object Object]
         inputConteudo.value = typeof resultado === 'string' ? resultado : (resultado.texto || JSON.stringify(resultado));
+        
+        verificarAcesso(); // Atualiza créditos após gerar
     } catch (err) { 
         alert("Erro na IA. Verifique a sua conexão."); 
     } finally {
@@ -77,7 +94,7 @@ window.gerarComIA = async function() {
 };
 
 // ==========================================
-// 4. HISTÓRICO E BOTÕES DE ACÇÃO
+// 4. HISTÓRICO E AÇÕES
 // ==========================================
 async function carregarLista() {
     const { data: { session } } = await _supabase.auth.getSession();
@@ -91,9 +108,8 @@ async function carregarLista() {
     const listaDiv = document.getElementById('listaAtividades');
     if (listaDiv && data) {
         listaDiv.innerHTML = data.map(item => `
-            <div class="historico-item" onclick="recuperarPlano('${item.id}')" style="background:#f8fafc; border-left:5px solid #7c3aed; padding:12px; border-radius:10px; margin-bottom:10px; cursor:pointer;">
-                <strong>📋 ${item.tema}</strong><br>
-                <small style="color:#999;">${new Date(item.created_at).toLocaleDateString()}</small>
+            <div class="historico-item" onclick="recuperarPlano('${item.id}')">
+                <div><strong>📋 ${item.tema}</strong><br><small>${new Date(item.created_at).toLocaleDateString()}</small></div>
             </div>
         `).join('');
     }
@@ -102,6 +118,7 @@ async function carregarLista() {
 window.salvarNoBanco = async function() {
     const { data: { session } } = await _supabase.auth.getSession();
     if (!session) return alert("Inicie sessão para guardar!");
+    if (!inputConteudo.value) return alert("Gere um plano antes de salvar!");
 
     const { error } = await _supabase.from('atividades').insert([
         { tema: inputTema.value, conteudo: inputConteudo.value, user_id: session.user.id }
@@ -131,5 +148,21 @@ window.fazerLogout = async (e) => {
     window.location.reload();
 };
 
+// Funções de Exportação (PDF e WhatsApp)
+window.zapDireto = () => {
+    if (!inputConteudo.value) return alert("Gere o plano primeiro!");
+    const msg = encodeURIComponent(`*Sismatic - Plano de Aula*\n\n${inputConteudo.value}`);
+    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+};
+
+window.pdfDireto = () => {
+    if (!inputConteudo.value) return alert("Gere o plano primeiro!");
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const texto = doc.splitTextToSize(inputConteudo.value, 180);
+    doc.text(texto, 15, 20);
+    doc.save("plano_sismatic.pdf");
+};
+
 // Inicialização
-verificarAcesso();
+document.addEventListener('DOMContentLoaded', verificarAcesso);
